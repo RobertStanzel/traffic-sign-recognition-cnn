@@ -93,15 +93,25 @@ def evaluate() -> None:
     print("-" * len(header))
 
     for idx in sorted(idx_to_class):
-        name = idx_to_class[idx]
+        folder = idx_to_class[idx]
+        try:
+            name = config.GTSRB_CLASSES.get(int(folder), folder)
+        except ValueError:
+            name = folder
         total = class_total[idx]
         acc = 100.0 * class_correct[idx] / total if total > 0 else 0.0
         print(f"{name:<45}  {total:>7}  {acc:>5.1f}%")
 
-    # --- Confusion matrix ----------------------------------------------
+    # --- Confusion matrix (with proper GTSRB label names) --------------
     os.makedirs(config.OUTPUT_DIR, exist_ok=True)
+    gtsrb_idx_to_name = {}
+    for idx, folder in idx_to_class.items():
+        try:
+            gtsrb_idx_to_name[idx] = config.GTSRB_CLASSES.get(int(folder), folder)
+        except ValueError:
+            gtsrb_idx_to_name[idx] = folder
     cm_path = os.path.join(config.OUTPUT_DIR, "confusion_matrix.png")
-    plot_confusion_matrix(all_labels, all_preds, idx_to_class, save_path=cm_path)
+    plot_confusion_matrix(all_labels, all_preds, gtsrb_idx_to_name, save_path=cm_path)
 
     print(f"\n[DONE] Evaluation complete.")
 

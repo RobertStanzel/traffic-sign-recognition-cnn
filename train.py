@@ -161,6 +161,8 @@ def main() -> None:
     print(f"\n[INFO] Starting training — up to {config.NUM_EPOCHS} epochs "
           f"(early stopping patience: {config.EARLY_STOPPING_PATIENCE})\n")
 
+    training_start = time.time()
+
     for epoch in range(1, config.NUM_EPOCHS + 1):
         t0 = time.time()
 
@@ -208,11 +210,16 @@ def main() -> None:
                       f"no val_loss improvement for {config.EARLY_STOPPING_PATIENCE} epochs.")
                 break
 
+    total_time = time.time() - training_start
+    hours, rem = divmod(int(total_time), 3600)
+    minutes, seconds = divmod(rem, 60)
+
     plot_training_curves(
         train_losses, val_losses, train_accs, val_accs,
         save_path=os.path.join(config.OUTPUT_DIR, "training_curves.png"),
     )
-    print(f"\n[DONE] Training complete. Best val_loss={best_val_loss:.4f}")
+    print(f"\n[DONE] Training complete in {hours:02d}h {minutes:02d}m {seconds:02d}s")
+    print(f"       Best val_loss={best_val_loss:.4f}")
     print(f"       Checkpoint: {config.MODEL_SAVE_PATH}")
 
 

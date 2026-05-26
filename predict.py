@@ -208,13 +208,32 @@ def main() -> None:
             "  python predict.py --input data/raw/drive.mp4\n"
         ),
     )
-    parser.add_argument("--input", required=True, help="Path to an image or video file.")
+    parser.add_argument("--input", help="Path to an image or video file.")
     parser.add_argument(
         "--checkpoint",
         default=config.MODEL_SAVE_PATH,
         help=f"Path to model checkpoint (default: {config.MODEL_SAVE_PATH})",
     )
+    parser.add_argument(
+        "--top_k", type=int, default=3,
+        help="Number of top predictions to show for images (default: 3)",
+    )
+    parser.add_argument(
+        "--list-classes", action="store_true",
+        help="Print all 43 recognizable sign classes and exit.",
+    )
     args = parser.parse_args()
+
+    # --list-classes: no model needed, just print and exit
+    if args.list_classes:
+        print("\n  All 43 GTSRB sign classes this model can recognize:\n")
+        for idx, name in sorted(config.GTSRB_CLASSES.items()):
+            print(f"  {idx:>2}  {name}")
+        print()
+        sys.exit(0)
+
+    if not args.input:
+        parser.error("--input is required unless --list-classes is used.")
 
     # Load model
     try:
@@ -235,7 +254,7 @@ def main() -> None:
     image_exts = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".ppm"}
 
     if ext in image_exts:
-        predict_image(args.input, model, idx_to_class, transform)
+        predict_image(args.input, model, idx_to_class, transform, top_k=args.top_k)
     elif ext in video_exts:
         predict_video(args.input, model, idx_to_class, transform)
     else:
