@@ -1,0 +1,27 @@
+# Model checkpoints (too large for git)
+models/best_model.pth
+models/*.pth
+
+# Dataset and raw data (too large for git)
+data/dataset/
+data/raw/
+data/frames/
+
+# Output files
+output/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

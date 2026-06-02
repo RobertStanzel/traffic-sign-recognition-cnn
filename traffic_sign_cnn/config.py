@@ -5,40 +5,58 @@ import torch
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-DATA_DIR = "data/dataset"
-RAW_DIR = "data/raw"
-FRAMES_DIR = "data/frames"
+DATA_DIR        = "data/dataset"
+RAW_DIR         = "data/raw"
+FRAMES_DIR      = "data/frames"
 MODEL_SAVE_PATH = "models/best_model.pth"
-OUTPUT_DIR = "output"
+OUTPUT_DIR      = "output"
+YOLO_MODEL_PATH = "models/yolo_detector.pt"   # trained by train_yolo.py
+GTSDB_DIR       = "data/gtsdb"                # raw GTSDB images + annotations
 
 # ---------------------------------------------------------------------------
 # Image settings
 # ---------------------------------------------------------------------------
-IMG_SIZE = 64
+IMG_SIZE = 96                              # upgraded from 64 — more detail in crops
+
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
-IMAGENET_STD = [0.229, 0.224, 0.225]
+IMAGENET_STD  = [0.229, 0.224, 0.225]
 
 # ---------------------------------------------------------------------------
 # Training hyperparameters
 # ---------------------------------------------------------------------------
-BATCH_SIZE = 32
-NUM_EPOCHS = 50
-LEARNING_RATE = 1e-3
-WEIGHT_DECAY = 1e-4
-EARLY_STOPPING_PATIENCE = 7
+BATCH_SIZE               = 32
+NUM_EPOCHS               = 60
+LEARNING_RATE            = 3e-4            # lower LR suits pretrained backbone
+WEIGHT_DECAY             = 1e-4
+EARLY_STOPPING_PATIENCE  = 10
+LABEL_SMOOTHING          = 0.1            # reduces overconfidence on GTSRB
+
+# Freeze ResNet backbone for this many epochs before unfreezing all layers.
+# Lets the new head stabilise before fine-tuning the backbone weights.
+UNFREEZE_EPOCH           = 5
 
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
-VAL_SPLIT = 0.2
-FRAME_EXTRACT_INTERVAL_SEC = 1.0
-# NOTE: set NUM_WORKERS = 0 on Windows if you hit multiprocessing errors
-NUM_WORKERS = 0
+VAL_SPLIT                    = 0.2
+FRAME_EXTRACT_INTERVAL_SEC   = 1.0
+NUM_WORKERS                  = 0          # keep 0 on Windows
 
 # ---------------------------------------------------------------------------
 # Model selection
 # ---------------------------------------------------------------------------
-USE_PRETRAINED_RESNET = False  # set True to use ResNet18 transfer learning
+USE_PRETRAINED_RESNET = True              # upgraded from False
+
+# ---------------------------------------------------------------------------
+# YOLO detector
+# ---------------------------------------------------------------------------
+YOLO_CONF_THRESHOLD = 0.35               # minimum YOLO detection confidence
+YOLO_IMG_SIZE       = 640                # inference resolution for YOLO
+
+# Vertical ROI band for the classical Hough fallback.
+# Signs never appear in the top 5 % (sky) or bottom 20 % (road surface).
+ROI_Y_MIN = 0.05
+ROI_Y_MAX = 0.80
 
 # ---------------------------------------------------------------------------
 # Device

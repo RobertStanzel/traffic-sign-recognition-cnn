@@ -1,16 +1,31 @@
-# Model checkpoints (too large for git)
-models/best_model.pth
+# ── Model weights (large binary files) ───────────────────────────────────────
+traffic_sign_cnn/models/*.pth
+traffic_sign_cnn/models/*.pt
+traffic_sign_cnn/*.pt
+traffic_sign_cnn/*.pth
 models/*.pth
+models/*.pt
+*.pt
+*.pth
 
-# Dataset and raw data (too large for git)
-data/dataset/
-data/raw/
-data/frames/
+# ── Datasets (too large for git — see README for download instructions) ───────
+traffic_sign_cnn/data/dataset/
+traffic_sign_cnn/data/raw/
+traffic_sign_cnn/data/frames/
+traffic_sign_cnn/data/gtsdb/
+traffic_sign_cnn/data/gtsdb_yolo/
+data/
 
-# Output files
+# ── YOLO training runs ────────────────────────────────────────────────────────
+traffic_sign_cnn/runs/
+runs/
+
+# ── Server temp uploads & output ─────────────────────────────────────────────
+traffic_sign_cnn/_uploads/
+traffic_sign_cnn/output/
 output/
 
-# Python
+# ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *.pyo
@@ -18,10 +33,10 @@ __pycache__/
 venv/
 env/
 
-# IDE
+# ── IDE ───────────────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 
-# OS
+# ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

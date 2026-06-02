@@ -1,11 +1,46 @@
-# German Traffic Sign Recognition — CNN Classifier
+# Traffic Sign Recognition — CNN + YOLOv8
 
-A PyTorch-based CNN that trains on German traffic sign images and classifies
-them at inference time, outputting human-readable sign names (e.g. "Stop",
-"Speed limit (50km/h)", "No entry").
+A full end-to-end traffic sign detection and classification system with a live web interface.  
+Detects and classifies all **43 GTSRB classes** in real-time from images and videos.
 
-Supports the full **43-class GTSRB** label set, plus any custom classes you
-organise yourself.
+---
+
+## Architecture
+
+```
+Input frame
+    │
+    ▼
+┌─────────────────────┐
+│  YOLOv8n Detector   │  ← trained on GTSDB (900 real road images)
+│  (WHERE is the sign)│    falls back to Hough + Contour if unavailable
+└─────────────────────┘
+    │  bounding boxes
+    ▼
+┌─────────────────────┐
+│  ResNet-18 CNN      │  ← trained on GTSRB (39,000 cropped sign images)
+│  (WHAT is the sign) │    96×96 input, 43-class output
+└─────────────────────┘
+    │
+    ▼
+Label + Confidence (e.g. "Speed limit (70km/h) — 94.2%")
+```
+
+**Why two models?**  
+YOLO handles real-world detection (small, distant, occluded signs). The CNN does fine-grained 43-class classification using the much larger GTSRB dataset. Together they outperform either model alone.
+
+---
+
+## Features
+
+- **Live web interface** — drop an image or video, get annotated results instantly
+- **Real progress tracking** — upload %, frame counter, ETA for long videos
+- **Auto frame-skip** — scales with video length (3–8 frames) to keep processing fast
+- **Temporal tracker** — IoU-based tracker prevents label flickering between frames
+- **Vertical ROI band** — classical detector ignores sky and road surface (5%–80% of frame height)
+- **43-class GTSRB** support with human-readable sign names
+- **ResNet-18 backbone** — pretrained ImageNet weights, fine-tuned with progressive unfreezing
+- **Real-world augmentation** — perspective warp, motion blur, fog simulation, strong colour jitter, random erasing
 
 ---
 
@@ -13,233 +48,135 @@ organise yourself.
 
 ```
 traffic_sign_cnn/
-├── data/
-│   ├── raw/          ← put raw images / videos here
-│   ├── frames/       ← extracted video frames land here
-│   └── dataset/      ← training data, organised by class
+├── app.py                  ← Flask web server (run this to launch the UI)
+├── roi_interface.html      ← web UI (served by app.py)
+├── train.py                ← CNN classifier training loop
+├── train_yolo.py           ← YOLOv8n detector training
+├── detect_predict.py       ← detection + classification pipeline
+├── prepare_gtsdb.py        ← download & convert GTSDB to YOLO format
+├── evaluate.py             ← evaluation + confusion matrix
+├── predict.py              ← standalone CLI inference
+├── config.py               ← all hyperparameters and paths
 ├── models/
-│   └── cnn_model.py  ← CNN architecture (custom + ResNet18 option)
+│   ├── cnn_model.py        ← ResNet-18 + custom CNN architectures
+│   ├── best_model.pth      ← trained CNN weights (not in git — train locally)
+│   └── yolo_detector.pt    ← trained YOLO weights (not in git — train locally)
 ├── utils/
-│   ├── extract_frames.py   ← video → JPEG frames
-│   ├── dataset_loader.py   ← PyTorch Dataset + transforms
-│   └── visualize.py        ← training curves, confusion matrix
-├── train.py          ← full training loop
-├── evaluate.py       ← evaluation + confusion matrix
-├── predict.py        ← image / video inference CLI
-├── config.py         ← all hyperparameters and paths
-└── requirements.txt
+│   ├── dataset_loader.py   ← Dataset + real-world augmentation pipeline
+│   ├── visualize.py        ← training curves, confusion matrix
+│   └── extract_frames.py   ← video → JPEG frames
+└── data/
+    ├── dataset/            ← GTSRB training data (not in git)
+    ├── gtsdb/              ← GTSDB detection data (not in git)
+    └── gtsdb_yolo/         ← converted YOLO format (auto-generated)
 ```
 
 ---
 
-## 1 — Setup
-
-### Requirements
-
-- Python 3.10+
-- (Recommended) a virtual environment
+## Setup
 
 ```bash
-# Create and activate a virtual environment
-python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# macOS / Linux
-source .venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
+pip install ultralytics flask
 ```
-
-> **Windows note:** If you encounter multiprocessing errors with the DataLoader,
-> set `NUM_WORKERS = 0` in `config.py`.
 
 ---
 
-## 2 — Organise Your Dataset
+## Training
 
-Place images inside `data/dataset/` with **one sub-folder per class**.
-The folder name becomes the class label.
+### Step 1 — CNN Classifier (GTSRB)
 
-```
-data/dataset/
-    Stop/
-        img001.jpg
-        img002.jpg
-    SpeedLimit50/
-        img001.jpg
-        img002.jpg
-    NoEntry/
-        img001.jpg
-```
-
-**Using the GTSRB benchmark?**  
-Download from https://benchmark.ini.rub.de/ and rename the numbered folders
-(e.g. `00014` → `Stop`) to match the names in `GTSRB_CLASSES` in `config.py`,
-or leave the numeric names — the model works either way and maps them to
-English labels automatically during inference.
-
----
-
-## 3 — Extract Frames from Videos (optional)
-
-Place `.mp4 / .avi / .mov / .mkv` files in `data/raw/`, then run:
+Place GTSRB class subfolders inside `data/dataset/` then:
 
 ```bash
-python utils/extract_frames.py
-```
-
-Frames are saved to `data/frames/<video_name>/frame_XXXXXX.jpg`.
-Copy the frames you want into the appropriate class folder in `data/dataset/`.
-
-Adjust the extraction interval in `config.py`:
-```python
-FRAME_EXTRACT_INTERVAL_SEC = 1.0   # 1 frame per second
-```
-
----
-
-## 4 — Configure (optional)
-
-All settings live in `config.py`:
-
-| Setting | Default | Description |
-|---|---|---|
-| `IMG_SIZE` | 64 | Input image size (pixels) |
-| `BATCH_SIZE` | 32 | Training batch size |
-| `NUM_EPOCHS` | 50 | Maximum training epochs |
-| `LEARNING_RATE` | 1e-3 | Adam learning rate |
-| `EARLY_STOPPING_PATIENCE` | 7 | Epochs without improvement before stopping |
-| `VAL_SPLIT` | 0.2 | Fraction of data used for validation |
-| `USE_PRETRAINED_RESNET` | False | Set `True` to use ResNet18 transfer learning |
-| `NUM_WORKERS` | 0 | DataLoader workers (set 0 on Windows if errors) |
-| `DEVICE` | auto | `"cuda"` if GPU available, else `"cpu"` |
-
----
-
-## 5 — Train
-
-```bash
+cd traffic_sign_cnn
 python train.py
 ```
 
-- Saves the best checkpoint to `models/best_model.pth`
-- Saves training curves to `output/training_curves.png`
-- Early stopping kicks in if validation loss doesn't improve for
-  `EARLY_STOPPING_PATIENCE` epochs
+Key features: ResNet-18 pretrained backbone, progressive unfreezing, OneCycleLR, mixed precision, label smoothing, real-world augmentation.
 
-**Switch to ResNet18** (better accuracy, slower):
-```python
-# config.py
-USE_PRETRAINED_RESNET = True
+Output: `models/best_model.pth`
+
+---
+
+### Step 2 — Prepare GTSDB for YOLO
+
+Download `FullIJCNN2013.zip` from https://benchmark.ini.rub.de/gtsdb_dataset.html  
+Extract to `data/gtsdb/` then:
+
+```bash
+python prepare_gtsdb.py
 ```
 
 ---
 
-## 6 — Evaluate
+### Step 3 — YOLO Detector (GTSDB)
 
 ```bash
-python evaluate.py
+python train_yolo.py --device 0      # GPU
+python train_yolo.py --device cpu    # CPU
 ```
 
-Outputs:
-- Overall accuracy
-- Per-class accuracy table
-- Confusion matrix saved to `output/confusion_matrix.png`
+GTSDB validation results after training:
+```
+mAP@0.5:       97.1%
+mAP@0.5:0.95:  77.1%
+Precision:     97.8%
+Recall:        89.3%
+```
+
+Output: `models/yolo_detector.pt`
 
 ---
 
-## 7 — Inference
+## Web Interface
 
-### Single image
 ```bash
-python predict.py --input path/to/sign.jpg
+cd traffic_sign_cnn
+python app.py
 ```
-Prints top-3 predictions with confidence scores.
 
-### Video
-```bash
-python predict.py --input path/to/drive.mp4
-```
-Produces `output/drive_annotated.mp4` with the predicted sign label overlaid
-on each frame.
+Open **http://localhost:5000**
 
-### Custom checkpoint
+- Drop an image → annotated result in ~1 second
+- Drop a video → live progress bar with frame counter and ETA
+- Confidence slider to tune detection sensitivity
+- Download annotated result with the ↓ button
+
+The server auto-uses YOLO if `yolo_detector.pt` exists, otherwise falls back to classical Hough + contour detection.
+
+---
+
+## CLI
+
 ```bash
-python predict.py --input sign.jpg --checkpoint models/best_model.pth
+python detect_predict.py --input image.jpg
+python detect_predict.py --input video.mp4 --conf 60
 ```
 
 ---
 
-## Architecture
+## Detection Pipeline
 
-### Custom CNN (default)
+```
+detect_sign_regions(frame)
+    ├── YOLO available → YOLOv8n.predict() → bounding boxes
+    └── fallback → ROI band (5%–80%) → HoughCircles + colour contours → NMS
 
-| Block | Layers | Output Shape |
+→ classify_crop(crop) → ("Speed limit (70km/h)", 94.2%)
+→ SignTracker (IoU) → stable labels across frames
+```
+
+---
+
+## Key Config Parameters (`config.py`)
+
+| Parameter | Default | Description |
 |---|---|---|
-| 1 | Conv2d(3→32) + BN + ReLU + MaxPool | 32×32×32 |
-| 2 | Conv2d(32→64) + BN + ReLU + MaxPool | 64×16×16 |
-| 3 | Conv2d(64→128) + BN + ReLU + MaxPool | 128×8×8 |
-| 4 | Conv2d(128→256) + BN + ReLU + MaxPool | 256×4×4 |
-| FC | Dropout(0.5) → Linear(4096→512) → ReLU → Dropout(0.3) → Linear(512→N) | N logits |
-
-### ResNet18 (transfer learning)
-
-Pretrained ImageNet backbone with the final FC layer replaced by
-`Linear(512, N)`. Set `USE_PRETRAINED_RESNET = True` in `config.py`.
-
----
-
-## GTSRB Classes
-
-The 43 standard classes are defined in `config.GTSRB_CLASSES`. Examples:
-
-| Index | Name |
-|---|---|
-| 0 | Speed limit (20km/h) |
-| 14 | Stop |
-| 17 | No entry |
-| 25 | Road work |
-| 38 | Keep right |
-
----
-
-## Tips
-
-- **Not enough data?** Use the ResNet18 option — it generalises better with
-  fewer images due to pretrained features.
-- **Overfitting?** Reduce `LEARNING_RATE`, increase `WEIGHT_DECAY`, or add
-  more images via frame extraction.
-- **Slow training on CPU?** Reduce `BATCH_SIZE` and `IMG_SIZE`, or use a
-  machine with a CUDA GPU.
-
----
-
-## Future Improvements
-
-### Real-time Video Detection
-The current video pipeline (`predict.py`, `detect_predict.py`) overlays
-predictions on every frame but uses heuristic color/shape detection to locate
-signs, which produces false positives on real-world footage (flags, vehicles,
-reflections). The planned improvement is:
-
-- **Train a YOLOv8 detector** on annotated street-level footage so the system
-  can find exact bounding boxes for each sign before passing the crop to the
-  CNN classifier. This two-stage pipeline (detect → classify) will be far more
-  reliable than the current color/shape heuristics.
-- **Fine-tune the CNN on real video crops** to reduce domain mismatch between
-  the tightly-cropped GTSRB training images and real dashcam footage.
-- **Perspective correction** on each detected crop before classification to
-  handle signs viewed at an angle.
-
-### Additional Planned Improvements
-- **Larger input resolution** — increase `IMG_SIZE` from 64 to 128 for better
-  feature detail, especially on small or distant signs.
-- **Test-time augmentation (TTA)** — average predictions over multiple
-  augmented versions of each crop for higher confidence on edge cases.
-- **ONNX / TensorRT export** — export the trained model for faster CPU/edge
-  inference without PyTorch as a dependency.
-- **Web UI** — a simple Flask or Gradio interface for drag-and-drop image
-  prediction without using the command line.
-
-
+| `IMG_SIZE` | 96 | CNN input resolution (upgraded from 64) |
+| `USE_PRETRAINED_RESNET` | True | ResNet-18 backbone |
+| `LEARNING_RATE` | 3e-4 | AdamW LR |
+| `LABEL_SMOOTHING` | 0.1 | Cross-entropy smoothing |
+| `UNFREEZE_EPOCH` | 5 | When backbone unfreezes |
+| `ROI_Y_MIN / ROI_Y_MAX` | 0.05 / 0.80 | Vertical ROI band |
+| `YOLO_CONF_THRESHOLD` | 0.35 | Min YOLO confidence |
